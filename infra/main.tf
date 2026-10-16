@@ -5,23 +5,23 @@ locals {
 # Price history: one item per symbol per timestamp.
 #   "latest price"   -> Query symbol = X, ScanIndexForward = false, Limit = 1
 #   "price history"  -> Query symbol = X with a range condition on timestamp
-# resource "aws_dynamodb_table" "quotes" {
-#   name         = "${local.name_prefix}-quotes"
-#   billing_mode = "PAY_PER_REQUEST"
+resource "aws_dynamodb_table" "quotes" {
+  name         = "${local.name_prefix}-quotes"
+  billing_mode = "PAY_PER_REQUEST"
 
-#   hash_key  = "symbol"
-#   range_key = "timestamp"
+  hash_key  = "symbol"
+  range_key = "timestamp"
 
-#   attribute {
-#     name = "symbol"
-#     type = "S"
-#   }
+  attribute {
+    name = "symbol"
+    type = "S"
+  }
 
-#   attribute {
-#     name = "timestamp"
-#     type = "S" # ISO 8601, e.g. 2026-10-13T10:00:00Z (sorts correctly as a string)
-#   }
-# }
+  attribute {
+    name = "timestamp"
+    type = "N" # ISO 8601, e.g. 2026-10-13T10:00:00Z (sorts correctly as a string)
+  }
+}
 
 # Raw responses from the market data API, kept for replay and debugging.
 # resource "aws_s3_bucket" "raw_data" {

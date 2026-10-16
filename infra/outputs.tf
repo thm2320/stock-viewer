@@ -1,7 +1,7 @@
-# output "quotes_table_name" {
-#   description = "DynamoDB table holding price history."
-#   value       = aws_dynamodb_table.quotes.name
-# }
+output "quotes_table_name" {
+  description = "DynamoDB table holding price history."
+  value       = aws_dynamodb_table.quotes.name
+}
 
 # output "raw_data_bucket" {
 #   description = "S3 bucket for raw market data responses."
