@@ -1,0 +1,11 @@
+worktree:
+  sharedDirectories:
+    - node_modules
+    - apps/api/node_modules
+    - apps/docs/node_modules
+    - apps/ingest-service/node_modules
+    - apps/web/node_modules
+    - packages/eslint-config/node_modules
+    - packages/math/node_modules
+    - packages/ui/node_modules
+    - infra/.terraform

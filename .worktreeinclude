@@ -1,0 +1,6 @@
+# Local secrets/config (literal paths only; missing ones are skipped)
+.env
+.env.local
+apps/api/.env
+apps/ingest-service/.env
+apps/web/.env.local
