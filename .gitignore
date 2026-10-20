@@ -38,6 +38,7 @@ yarn-error.log*
 *.pem
 
 data/
-.terraform/
+.terraform
 *.tfstate
 *.tfstate.*
+infra/state
