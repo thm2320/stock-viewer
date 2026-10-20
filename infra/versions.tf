@@ -1,6 +1,6 @@
 terraform {
-  # Local state lives outside the repo; supply the path at init time:
-  #   terraform init -backend-config="path=$HOME/.terraform-state/stock-viewer/terraform.tfstate"
+  # Local state lives outside the repo; supply the path at init time
+  # by running ./init.sh (or `pnpm infra:init` from the repo root).
   backend "local" {}
 
   required_version = ">= 1.7.0"
