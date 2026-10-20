@@ -1,8 +1,7 @@
 terraform {
-  # Local state lives in infra/state, which orca.yaml shares across worktrees
-  backend "local" {
-    path = "state/terraform.tfstate"
-  }
+  # Local state lives outside the repo; supply the path at init time:
+  #   terraform init -backend-config="path=$HOME/.terraform-state/stock-viewer/terraform.tfstate"
+  backend "local" {}
 
   required_version = ">= 1.7.0"
 
