@@ -1,46 +1,62 @@
-export interface FiftyTwoWeek {
-  low: string;
-  high: string;
-  lowChange: string;
-  highChange: string;
-  lowChangePercent: string;
-  highChangePercent: string;
-  range: string; // '243.419998 - 348.149994'
-}
+import type { GetQuote200Response } from "@twelvedata/twelvedata-node";
 
-export interface TweleveDataQuote {
+export interface NormalizedTick {
   symbol: string;
-  name: string;
-  exchange: string;
-  micCode: string;
-  currency: string;
-  datetime: string;      // 'YYYY-MM-DD' for daily quotes
-  timestamp: number;     // Unix seconds
-  lastQuoteAt: number;   // Unix seconds
-
-  open: string;
-  high: string;
-  low: string;
-  close: string;
-  volume: string;
-  previousClose: string;
-  change: string;
-  percentChange: string;
-  averageVolume: string;
-
-  isMarketOpen: boolean;
-  fiftyTwoWeek: FiftyTwoWeek;
-
-  rolling1dChange?: string;
-  rolling7dChange?: string;
-  rollingChange?: string;
-
-  extendedChange?: string;
-  extendedPercentChange?: string;
-  extendedPrice?: string;
-  extendedTimestamp?: number;
+  timestamp: number; // Unix seconds, bar time
+  name?: string;
+  exchange?: string;
+  currency?: string;
+  datetime?: string;
+  open?: number;
+  high?: number;
+  low?: number;
+  close?: number;
+  previousClose?: number;
+  change?: number;
+  percentChange?: number;
+  volume?: number;
+  averageVolume?: number;
+  isMarketOpen?: boolean;
+  fiftyTwoWeekHigh?: number;
+  fiftyTwoWeekLow?: number;
+  ingestedAt: number; // Unix ms
 }
 
-interface NormalizedTick {
-    
+// TwelveData returns numbers as strings; undefined or NaN becomes undefined
+function toNumber(value: string | number | undefined): number | undefined {
+  if (value === undefined || value === "") return undefined;
+  const parsed = Number(value);
+  return Number.isNaN(parsed) ? undefined : parsed;
+}
+
+export function normalize(
+  quote: GetQuote200Response,
+  ingestedAt: number,
+): NormalizedTick {
+  const tick: NormalizedTick = {
+    symbol: quote.symbol,
+    timestamp: quote.timestamp,
+    name: quote.name,
+    exchange: quote.exchange,
+    currency: quote.currency,
+    datetime: quote.datetime,
+    open: toNumber(quote.open),
+    high: toNumber(quote.high),
+    low: toNumber(quote.low),
+    close: toNumber(quote.close),
+    previousClose: toNumber(quote.previousClose),
+    change: toNumber(quote.change),
+    percentChange: toNumber(quote.percentChange),
+    volume: toNumber(quote.volume),
+    averageVolume: toNumber(quote.averageVolume),
+    isMarketOpen: quote.isMarketOpen,
+    fiftyTwoWeekHigh: toNumber(quote.fiftyTwoWeek?.high),
+    fiftyTwoWeekLow: toNumber(quote.fiftyTwoWeek?.low),
+    ingestedAt,
+  };
+
+  // Drop undefined fields so they are never written
+  return Object.fromEntries(
+    Object.entries(tick).filter(([, value]) => value !== undefined),
+  ) as unknown as NormalizedTick;
 }

@@ -19,7 +19,7 @@ resource "aws_dynamodb_table" "quotes" {
 
   attribute {
     name = "timestamp"
-    type = "N" # ISO 8601, e.g. 2026-10-13T10:00:00Z (sorts correctly as a string)
+    type = "N" # Unix seconds of the quote bar (TwelveData timestamp)
   }
 }
 
