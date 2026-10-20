@@ -6,8 +6,9 @@ import {
 } from "@aws-sdk/client-dynamodb";
 import type { WriteRequest } from "@aws-sdk/client-dynamodb";
 import { marshall } from "@aws-sdk/util-dynamodb";
-import { toRawTick } from "./types.ts";
+import { toRawTick, toRedisTick } from "./tick-mappers.ts";
 import type { RawTick } from "./types.ts";
+import type { RedisSink } from "./redis-sink.ts";
 
 const FLUSH_INTERVAL_MS = 1_000;
 // DynamoDB BatchWriteItem accepts at most 25 items per call
@@ -15,6 +16,7 @@ const MAX_BATCH_SIZE = 25;
 
 interface StreamFeederConfig {
   symbols: string[];
+  redis: RedisSink;
 }
 
 export class StreamFeederService {
@@ -24,11 +26,13 @@ export class StreamFeederService {
   private config: StreamFeederConfig;
   private client: TwelvedataWebSocketClient;
   private dynamoDb: DynamoDBClient;
+  private redis: RedisSink;
   // Latest tick per symbol since the last flush
   private latest = new Map<string, RawTick>();
 
   constructor(config: StreamFeederConfig) {
     this.config = config;
+    this.redis = config.redis;
     // Without maxAttempts the client gives up after 10 failed reconnects
     this.client = new TwelvedataWebSocketClient({
       apiKey: process.env.TWELVEDATA_API_KEY!,
@@ -65,13 +69,18 @@ export class StreamFeederService {
     }
     this.client.disconnect();
     await this.flush();
+    await this.redis.close();
     console.log("[StreamFeeder] Service stopped gracefully.");
   }
 
   private registerListeners(): void {
     this.client.on("price", (event) => {
       try {
-        this.latest.set(event.symbol, toRawTick(event, Date.now()));
+        const tick = toRawTick(event, Date.now());
+        // Redis gets every tick as it arrives; only DynamoDB is batched by flush.
+        // publish never throws, so it cannot affect the DynamoDB write.
+        void this.redis.publish([toRedisTick(tick)]);
+        this.latest.set(event.symbol, tick);
       } catch (error) {
         console.warn("[StreamFeeder] Dropped invalid tick:", error);
       }

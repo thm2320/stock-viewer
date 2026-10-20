@@ -1,6 +1,7 @@
 // src/index.ts
 import { StockFeederService } from "./feeder-service.ts";
 import { StreamFeederService } from "./ws-feeder-service.ts";
+import { RedisSink } from "./redis-sink.ts";
 
 // Free-tier TwelveData limit: 8 API requests per minute
 const FREE_TIER_REQUESTS_PER_MINUTE = 8;
@@ -19,11 +20,22 @@ const requiredEnv = [
   "TWELVEDATA_API_KEY",
   feedMode === "ws" ? "TICKS_TABLE_NAME" : "DYNAMODB_TABLE_NAME",
   "AWS_REGION",
+  "REDIS_URL",
 ];
 const missingEnv = requiredEnv.filter((name) => !process.env[name]);
 if (missingEnv.length > 0) {
   console.error(
     `Missing required environment variables: ${missingEnv.join(", ")}`,
+  );
+  process.exit(1);
+}
+
+try {
+  const { protocol } = new URL(process.env.REDIS_URL!);
+  if (protocol !== "redis:" && protocol !== "rediss:") throw new Error(protocol);
+} catch {
+  console.error(
+    `Invalid REDIS_URL: expected a redis:// or rediss:// URL.`,
   );
   process.exit(1);
 }
@@ -45,10 +57,12 @@ if (feedMode === "ws" && symbols.length > FREE_TIER_WS_SYMBOLS) {
   );
 }
 
+const redis = new RedisSink(process.env.REDIS_URL!);
+
 const feeder =
   feedMode === "ws"
-    ? new StreamFeederService({ symbols })
-    : new StockFeederService({ symbols, pollIntervalMs });
+    ? new StreamFeederService({ symbols, redis })
+    : new StockFeederService({ symbols, pollIntervalMs, redis });
 
 console.log(`Starting Stock Market Feeder Ingest Service (${feedMode})...`);
 try {
