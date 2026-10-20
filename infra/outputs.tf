@@ -3,6 +3,11 @@ output "quotes_table_name" {
   value       = aws_dynamodb_table.quotes.name
 }
 
+output "ticks_table_name" {
+  description = "DynamoDB table holding raw WebSocket ticks."
+  value       = aws_dynamodb_table.ticks.name
+}
+
 # output "raw_data_bucket" {
 #   description = "S3 bucket for raw market data responses."
 #   value       = aws_s3_bucket.raw_data.bucket

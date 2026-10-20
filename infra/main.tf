@@ -23,6 +23,31 @@ resource "aws_dynamodb_table" "quotes" {
   }
 }
 
+# Raw WebSocket ticks: one item per symbol per second (latest tick wins).
+# Items expire through the expiresAt TTL attribute.
+resource "aws_dynamodb_table" "ticks" {
+  name         = "${local.name_prefix}-ticks"
+  billing_mode = "PAY_PER_REQUEST"
+
+  hash_key  = "symbol"
+  range_key = "timestamp"
+
+  attribute {
+    name = "symbol"
+    type = "S"
+  }
+
+  attribute {
+    name = "timestamp"
+    type = "N" # Unix seconds of the tick (WebSocket price event timestamp)
+  }
+
+  ttl {
+    attribute_name = "expiresAt"
+    enabled        = true
+  }
+}
+
 # Raw responses from the market data API, kept for replay and debugging.
 # resource "aws_s3_bucket" "raw_data" {
 #   bucket = "${local.name_prefix}-raw-data"
