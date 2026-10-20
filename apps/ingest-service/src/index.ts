@@ -1,35 +1,45 @@
 // src/index.ts
-// import dotenv from 'dotenv';
-// import { StockFeederService } from './FeederService';
-// import { FeederConfig } from './types';
-
 import { StockFeederService } from "./feeder-service.ts";
 
+// Free-tier TwelveData limit: 8 API requests per minute
+const FREE_TIER_REQUESTS_PER_MINUTE = 8;
+const DEFAULT_POLL_INTERVAL_MS = 60_000;
 
-// dotenv.config();
+const requiredEnv = ["TWELVEDATA_API_KEY", "DYNAMODB_TABLE_NAME", "AWS_REGION"];
+const missingEnv = requiredEnv.filter((name) => !process.env[name]);
+if (missingEnv.length > 0) {
+  console.error(
+    `Missing required environment variables: ${missingEnv.join(", ")}`,
+  );
+  process.exit(1);
+}
 
-// const config: FeederConfig = {
-//   // Replace with your provider's WebSocket endpoint (e.g., Finnhub, Polygon.io, Alpaca)
-//   websocketUrl: process.env.WS_FEED_URL || 'wss://ws.finnHub.io', 
-//   apiKey: process.env.API_KEY || 'YOUR_API_KEY',
-//   symbols: ['AAPL', 'TSLA', 'MSFT', 'AMZN', 'GOOGL'],
-//   batchSize: 100,            // Flush when 100 items accumulate
-//   flushIntervalMs: 1000,     // Or flush every 1 second max
-// };
+const symbols = (process.env.SYMBOLS ?? "AAPL")
+  .split(",")
+  .map((symbol) => symbol.trim())
+  .filter(Boolean);
+const pollIntervalMs =
+  Number(process.env.POLL_INTERVAL_MS) || DEFAULT_POLL_INTERVAL_MS;
 
-// const feeder = new StockFeederService(config);
+if (symbols.length > FREE_TIER_REQUESTS_PER_MINUTE) {
+  console.warn(
+    `${symbols.length} symbols exceeds the free-tier limit of ${FREE_TIER_REQUESTS_PER_MINUTE} requests per minute; some quotes may be rate limited.`,
+  );
+}
+
 const feeder = new StockFeederService({
-    symbols:['AAPL'],
-    // symbols:['SMGB'],
-    pollIntervalMs:10000
+  symbols,
+  pollIntervalMs,
 });
 
-console.log('Starting Stock Market Feeder Ingest Service...');
+console.log("Starting Stock Market Feeder Ingest Service...");
 feeder.start();
 
 // Handle graceful shutdown on signals
-process.on('SIGINT', () => {
-  console.log('\nStopping service due to SIGINT...');
-  feeder.stop();
-  process.exit(0);
-});
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  process.on(signal, () => {
+    console.log(`\nStopping service due to ${signal}...`);
+    feeder.stop();
+    process.exit(0);
+  });
+}

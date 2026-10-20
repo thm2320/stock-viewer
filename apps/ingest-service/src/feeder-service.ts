@@ -1,5 +1,4 @@
-// src/PollingFeederService.ts
-// import { PollingFeederConfig, NormalizedTick, RawQuoteResponse } from './types';
+// src/feeder-service.ts
 import {
   MarketDataApi,
   CreateConfig,
@@ -7,7 +6,8 @@ import {
 } from "@twelvedata/twelvedata-node";
 import type { GetQuote200Response } from "@twelvedata/twelvedata-node";
 import { DynamoDBClient, PutItemCommand } from "@aws-sdk/client-dynamodb";
-// import { TweleveDataQuote } from "./types.ts";
+import { marshall } from "@aws-sdk/util-dynamodb";
+import { normalize } from "./types.ts";
 
 interface PollingFeederConfig {
   symbols: string[];
@@ -16,6 +16,7 @@ interface PollingFeederConfig {
 
 export class StockFeederService {
   private isRunning = false;
+  private isPolling = false;
   private timer: NodeJS.Timeout | null = null;
   private config: PollingFeederConfig;
   private apiKey: string = process.env.TWELVEDATA_API_KEY!;
@@ -36,15 +37,15 @@ export class StockFeederService {
     this.isRunning = true;
 
     console.log(
-      `[PollingFeeder] Service started. Fetching every ${this.config.pollIntervalMs / 1000}s...`,
+      `[PollingFeeder] Service started. Fetching ${this.config.symbols.join(", ")} every ${this.config.pollIntervalMs / 1000}s...`,
     );
 
     // Run immediately on start, then loop
-    this.pollSymbols();
+    this.runCycle();
 
     this.timer = setInterval(() => {
-      this.pollSymbols();
-    }, this.config?.pollIntervalMs);
+      this.runCycle();
+    }, this.config.pollIntervalMs);
   }
 
   public stop(): void {
@@ -56,88 +57,87 @@ export class StockFeederService {
     console.log("[PollingFeeder] Service stopped gracefully.");
   }
 
-  private async pollSymbols(): Promise<void> {
-    // console.log(`[PollingFeeder] Starting poll cycle for symbols: ${this.config.symbols.join(', ')}`);
-    console.log(`[PollingFeeder] Starting poll cycle for symbols: `);
+  // Skip the tick if the previous cycle is still running
+  private async runCycle(): Promise<void> {
+    if (this.isPolling) {
+      console.warn("[PollingFeeder] Previous cycle still running, skipping.");
+      return;
+    }
+    this.isPolling = true;
+    try {
+      await this.pollSymbols();
+    } catch (error) {
+      console.error("[PollingFeeder] Poll cycle failed:", error);
+    } finally {
+      this.isPolling = false;
+    }
+  }
 
-    const timestamp = Date.now();
+  private async pollSymbols(): Promise<void> {
+    console.log(
+      `[PollingFeeder] Starting poll cycle for symbols: ${this.config.symbols.join(", ")}`,
+    );
+
+    const ingestedAt = Date.now();
 
     // Fetch symbols in parallel
-    const promises = this.config.symbols.map((symbol) =>
-      this.fetchSymbolQuote(symbol, timestamp),
+    const quotes = await Promise.all(
+      this.config.symbols.map((symbol) => this.fetchSymbolQuote(symbol)),
     );
-    const records = await Promise.all(promises);
-    // console.log(results);
+    const batch = quotes.filter(
+      (quote): quote is GetQuote200Response => quote !== undefined,
+    );
 
-    // const batch: NormalizedTick[] = [];
-
-    // for (const result of results) {
-    //   if (result.status === 'fulfilled' && result.value) {
-    //     batch.push(result.value);
-    //   }
-    // }
-
-    if (records.length > 0) {
-      this.processBatch(records);
+    if (batch.length > 0) {
+      await this.processBatch(batch, ingestedAt);
     }
   }
 
-  //   private async fetchSymbolQuote(symbol: string, ingestTimestamp: number): Promise<NormalizedTick | null> {
   private async fetchSymbolQuote(
     symbol: string,
-    ingestTimestamp: number,
   ): Promise<GetQuote200Response | undefined> {
     try {
-      const response: GetQuote200Response = await this.api.getQuote({
-        interval: "1day",
+      return await this.api.getQuote({
+        interval: "1min",
         symbol,
-        // outputsize: 50,
       });
-      return response;
     } catch (error) {
       if (error instanceof TwelvedataApiError) {
-        console.error("API error:", error);
+        console.error(`[PollingFeeder] API error for ${symbol}:`, error);
       } else {
-        console.error("Unexpected error:", error);
+        console.error(`[PollingFeeder] Unexpected error for ${symbol}:`, error);
       }
     }
   }
 
-  //   private normalize(symbol: string, raw: RawQuoteResponse, ingestTimestamp: number): NormalizedTick {
-  //     return {
-  //       symbol,
-  //       price: raw.c,
-  //       high: raw.h,
-  //       low: raw.l,
-  //       open: raw.o,
-  //       previousClose: raw.pc,
-  //       exchangeTimestamp: raw.t ? raw.t * 1000 : ingestTimestamp, // Convert seconds to ms if needed
-  //       ingestTimestamp,
-  //       type: 'quote',
-  //     };
-  //   }
-
   private async processBatch(
-    batch: (GetQuote200Response | undefined)[],
+    batch: GetQuote200Response[],
+    ingestedAt: number,
   ): Promise<void> {
-    // Downstream sink logic (e.g., insert into DB, write to file, push to queue)
-    console.log(`[Sink] Processed batch of ${batch.length} quotes:`);
-    for (const tick of batch) {
-      if (tick) {
-        const command = new PutItemCommand({
-          TableName: process.env.DYNAMODB_TABLE_NAME,
-          Item: {
-            symbol:{
-                S: tick.symbol
-            },
-            timestamp: {
-                N: `${tick.timestamp}`
-            },
-          },
-        });
-        this.dynamoDb.send(command);
+    const results = await Promise.allSettled(
+      batch.map((quote) =>
+        this.dynamoDb.send(
+          new PutItemCommand({
+            TableName: process.env.DYNAMODB_TABLE_NAME,
+            Item: marshall(normalize(quote, ingestedAt), {
+              removeUndefinedValues: true,
+            }),
+          }),
+        ),
+      ),
+    );
+
+    let written = 0;
+    results.forEach((result, i) => {
+      if (result.status === "fulfilled") {
+        written++;
+      } else {
+        console.error(
+          `[Sink] Failed to write ${batch[i]!.symbol}:`,
+          result.reason,
+        );
       }
-      // console.log(` -> ${tick.symbol}: $${tick.price} (High: $${tick.high}, Low: $${tick.low})`);
-    }
+    });
+    console.log(`[Sink] Wrote ${written}/${batch.length} quotes.`);
   }
 }
