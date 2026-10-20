@@ -2,7 +2,8 @@ import type {
   GetQuote200Response,
   PriceEvent,
 } from "@twelvedata/twelvedata-node";
-import type { NormalizedTick, RawTick, RedisTick } from "./types.ts";
+import type { RedisTick } from "@repo/shared";
+import type { NormalizedTick, RawTick } from "./types.ts";
 
 // TwelveData returns numbers as strings; undefined or NaN becomes undefined
 function toNumber(value: string | number | undefined): number | undefined {
