@@ -1,18 +1,11 @@
 // src/redis-sink.ts
 import { Redis } from "ioredis";
-import type { RedisTick } from "./types.ts";
+import { quoteKey, tickChannel } from "@repo/shared";
+import type { RedisTick } from "@repo/shared";
 
 // Keep a Redis outage from stalling a flush
 const COMMAND_TIMEOUT_MS = 2_000;
 const MAX_RETRY_DELAY_MS = 5_000;
-
-export function quoteKey(symbol: string): string {
-  return `quote:${symbol}`;
-}
-
-export function tickChannel(symbol: string): string {
-  return `ticks:${symbol}`;
-}
 
 export class RedisSink {
   private redis: Redis;

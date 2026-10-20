@@ -1,3 +1,5 @@
+import type { RedisTick } from "@repo/shared";
+
 export interface NormalizedTick {
   symbol: string;
   timestamp: number; // Unix seconds, bar time
@@ -21,20 +23,6 @@ export interface NormalizedTick {
 }
 
 // One WebSocket price event; price only, unlike the quote-shaped NormalizedTick
-export interface RawTick {
-  symbol: string;
-  timestamp: number; // Unix seconds, tick time
-  price: number;
-  bid?: number;
-  ask?: number;
-  dayVolume?: number;
-  currency?: string;
-  exchange?: string;
-  micCode?: string;
-  type?: string;
-  ingestedAt: number; // Unix ms
+export interface RawTick extends RedisTick {
   expiresAt: number; // Unix seconds, DynamoDB TTL
 }
-
-// Tick shape published to Redis: RawTick without the DynamoDB-only TTL
-export type RedisTick = Omit<RawTick, "expiresAt">;
