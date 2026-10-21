@@ -11,8 +11,16 @@ async function bootstrap() {
     console.error(error instanceof Error ? error.message : error);
     process.exit(1);
   }
-  const app = await NestFactory.create(AppModule);
-  app.enableShutdownHooks();
-  await app.listen(port);
+  try {
+    const app = await NestFactory.create(AppModule);
+    app.enableShutdownHooks();
+    await app.listen(port);
+  } catch (error) {
+    // Startup failures (e.g. Redis unreachable) are already logged by their source
+    console.error(
+      `Startup failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    process.exit(1);
+  }
 }
 await bootstrap();
