@@ -27,6 +27,8 @@ export const config = [
     },
     rules: {
       "turbo/no-undeclared-env-vars": "warn",
+      // Always use braces for if/else/for/while bodies
+      curly: ["error", "all"],
     },
   },
   {
