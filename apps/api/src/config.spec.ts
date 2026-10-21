@@ -50,7 +50,9 @@ describe('loadConfig', () => {
   );
 
   it('rejects an empty SYMBOLS list', () => {
-    expect(() => loadConfig({ ...base, SYMBOLS: ' , ' })).toThrow(/at least one/);
+    expect(() => loadConfig({ ...base, SYMBOLS: ' , ' })).toThrow(
+      /at least one/,
+    );
   });
 
   it('parses PORT and validates bounds', () => {

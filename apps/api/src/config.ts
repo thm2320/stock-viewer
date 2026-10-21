@@ -23,10 +23,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
 }
 
 function parseRedisUrl(raw: string | undefined): string {
-  if (!raw) throw new ConfigError('Missing required env var REDIS_URL');
+  if (!raw) {
+    throw new ConfigError('Missing required env var REDIS_URL');
+  }
   try {
     const { protocol } = new URL(raw);
-    if (protocol !== 'redis:' && protocol !== 'rediss:') throw new Error();
+    if (protocol !== 'redis:' && protocol !== 'rediss:') {
+      throw new Error();
+    }
   } catch {
     // Never echo the value: it may contain a password
     throw new ConfigError(
@@ -42,12 +46,16 @@ function parseSymbols(raw: string | undefined): string[] {
   const symbols: string[] = [];
   for (const entry of (raw ?? DEFAULT_SYMBOLS).split(',')) {
     const symbol = entry.trim();
-    if (!symbol) continue;
+    if (!symbol) {
+      continue;
+    }
     if (!SYMBOL_PATTERN.test(symbol)) {
       throw new ConfigError(`Invalid symbol in SYMBOLS: "${symbol}"`);
     }
     const key = symbol.toLowerCase();
-    if (seen.has(key)) continue;
+    if (seen.has(key)) {
+      continue;
+    }
     seen.add(key);
     symbols.push(symbol);
   }
@@ -58,7 +66,9 @@ function parseSymbols(raw: string | undefined): string[] {
 }
 
 function parsePort(raw: string | undefined): number {
-  if (raw === undefined || raw === '') return DEFAULT_PORT;
+  if (raw === undefined || raw === '') {
+    return DEFAULT_PORT;
+  }
   const port = Number(raw);
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     throw new ConfigError(`Invalid PORT "${raw}": expected 1-65535.`);
