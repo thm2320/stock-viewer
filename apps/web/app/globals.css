@@ -1,12 +1,22 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --muted: #6b6b6b;
+  --up: #0a7d3c;
+  --down: #c62828;
+  --up-bg: rgba(10, 125, 60, 0.25);
+  --down-bg: rgba(198, 40, 40, 0.25);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
     --background: #0a0a0a;
     --foreground: #ededed;
+    --muted: #9a9a9a;
+    --up: #3ddc84;
+    --down: #ff6b6b;
+    --up-bg: rgba(61, 220, 132, 0.3);
+    --down-bg: rgba(255, 107, 107, 0.3);
   }
 }
 
