@@ -266,10 +266,6 @@ importers:
         version: 7.0.2
 
   packages/shared:
-    dependencies:
-      zod:
-        specifier: ^4
-        version: 4.4.3
     devDependencies:
       '@repo/typescript-config':
         specifier: workspace:*
