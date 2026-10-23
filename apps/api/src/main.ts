@@ -1,5 +1,4 @@
 import { NestFactory } from '@nestjs/core';
-import { WsAdapter } from '@nestjs/platform-ws';
 import { AppModule } from './app.module.js';
 import { loadConfig } from './config.js';
 
@@ -14,7 +13,7 @@ async function bootstrap() {
   }
   try {
     const app = await NestFactory.create(AppModule);
-    app.useWebSocketAdapter(new WsAdapter(app));
+    // No adapter call needed: Nest uses IoAdapter when platform-socket.io is installed
     app.enableShutdownHooks();
     await app.listen(port);
   } catch (error) {
