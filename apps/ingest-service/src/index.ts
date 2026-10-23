@@ -32,11 +32,10 @@ if (missingEnv.length > 0) {
 
 try {
   const { protocol } = new URL(process.env.REDIS_URL!);
-  if (protocol !== "redis:" && protocol !== "rediss:") throw new Error(protocol);
+  if (protocol !== "redis:" && protocol !== "rediss:")
+    throw new Error(protocol);
 } catch {
-  console.error(
-    `Invalid REDIS_URL: expected a redis:// or rediss:// URL.`,
-  );
+  console.error(`Invalid REDIS_URL: expected a redis:// or rediss:// URL.`);
   process.exit(1);
 }
 
@@ -51,18 +50,21 @@ if (feedMode === "ws" && symbols.length > FREE_TIER_WS_SYMBOLS) {
   console.warn(
     `${symbols.length} symbols exceeds the free-tier limit of ${FREE_TIER_WS_SYMBOLS} WebSocket symbols; some subscriptions may be rejected.`,
   );
-} else if (feedMode === "rest" && symbols.length > FREE_TIER_REQUESTS_PER_MINUTE) {
+} else if (
+  feedMode === "rest" &&
+  symbols.length > FREE_TIER_REQUESTS_PER_MINUTE
+) {
   console.warn(
     `${symbols.length} symbols exceeds the free-tier limit of ${FREE_TIER_REQUESTS_PER_MINUTE} requests per minute; some quotes may be rate limited.`,
   );
 }
 
-const redis = new RedisSink(process.env.REDIS_URL!);
+const redisSink = new RedisSink(process.env.REDIS_URL!);
 
 const feeder =
   feedMode === "ws"
-    ? new StreamFeederService({ symbols, redis })
-    : new StockFeederService({ symbols, pollIntervalMs, redis });
+    ? new StreamFeederService({ symbols, redisSink })
+    : new StockFeederService({ symbols, pollIntervalMs, redisSink });
 
 console.log(`Starting Stock Market Feeder Ingest Service (${feedMode})...`);
 try {

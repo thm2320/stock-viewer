@@ -13,7 +13,7 @@ import type { RedisSink } from "./redis-sink.ts";
 interface PollingFeederConfig {
   symbols: string[];
   pollIntervalMs: number;
-  redis: RedisSink;
+  redisSink: RedisSink;
 }
 
 export class StockFeederService {
@@ -24,11 +24,11 @@ export class StockFeederService {
   private apiKey: string = process.env.TWELVEDATA_API_KEY!;
   private api: MarketDataApi;
   private dynamoDb: DynamoDBClient;
-  private redis: RedisSink;
+  private redisSink: RedisSink;
 
   constructor(config: PollingFeederConfig) {
     this.config = config;
-    this.redis = config.redis;
+    this.redisSink = config.redisSink;
     this.api = new MarketDataApi(CreateConfig(this.apiKey));
     this.dynamoDb = new DynamoDBClient({
       region: process.env.AWS_REGION,
@@ -58,7 +58,7 @@ export class StockFeederService {
       clearInterval(this.timer);
       this.timer = null;
     }
-    await this.redis.close();
+    await this.redisSink.close();
     console.log("[PollingFeeder] Service stopped gracefully.");
   }
 
@@ -122,7 +122,7 @@ export class StockFeederService {
     const ticks = batch.map((quote) => normalize(quote, ingestedAt));
 
     // Redis first; it never throws, so it cannot skip the DynamoDB write
-    await this.redis.publish(ticks.map(toRedisTick));
+    await this.redisSink.publish(ticks.map(toRedisTick));
 
     const results = await Promise.allSettled(
       ticks.map((tick) =>

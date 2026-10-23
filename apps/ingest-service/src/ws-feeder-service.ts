@@ -16,7 +16,7 @@ const MAX_BATCH_SIZE = 25;
 
 interface StreamFeederConfig {
   symbols: string[];
-  redis: RedisSink;
+  redisSink: RedisSink;
 }
 
 export class StreamFeederService {
@@ -26,13 +26,13 @@ export class StreamFeederService {
   private config: StreamFeederConfig;
   private client: TwelvedataWebSocketClient;
   private dynamoDb: DynamoDBClient;
-  private redis: RedisSink;
+  private redisSink: RedisSink;
   // Latest tick per symbol since the last flush
   private latest = new Map<string, RawTick>();
 
   constructor(config: StreamFeederConfig) {
     this.config = config;
-    this.redis = config.redis;
+    this.redisSink = config.redisSink;
     // Without maxAttempts the client gives up after 10 failed reconnects
     this.client = new TwelvedataWebSocketClient({
       apiKey: process.env.TWELVEDATA_API_KEY!,
@@ -69,7 +69,7 @@ export class StreamFeederService {
     }
     this.client.disconnect();
     await this.flush();
-    await this.redis.close();
+    await this.redisSink.close();
     console.log("[StreamFeeder] Service stopped gracefully.");
   }
 
@@ -79,7 +79,7 @@ export class StreamFeederService {
         const tick = toRawTick(event, Date.now());
         // Redis gets every tick as it arrives; only DynamoDB is batched by flush.
         // publish never throws, so it cannot affect the DynamoDB write.
-        void this.redis.publish([toRedisTick(tick)]);
+        void this.redisSink.publish([toRedisTick(tick)]);
         this.latest.set(event.symbol, tick);
       } catch (error) {
         console.warn("[StreamFeeder] Dropped invalid tick:", error);
