@@ -1,6 +1,6 @@
 // src/redis-sink.ts
 import { Redis } from "ioredis";
-import { quoteKey, tickChannel } from "@repo/shared";
+import { DYNAMIC_SYMBOLS_KEY, quoteKey, tickChannel } from "@repo/shared";
 import type { RedisTick } from "@repo/shared";
 
 // Keep a Redis outage from stalling a flush
@@ -59,6 +59,33 @@ export class RedisSink {
       }
     } catch (error) {
       console.error("[Redis] Publish failed:", error);
+    }
+  }
+
+  // Never throws; a lost write only means the symbol is not restored on boot
+  public async addDynamicSymbol(symbol: string): Promise<void> {
+    try {
+      await this.redis.sadd(DYNAMIC_SYMBOLS_KEY, symbol);
+    } catch (error) {
+      console.error(`[Redis] Failed to persist ${symbol}:`, error);
+    }
+  }
+
+  public async removeDynamicSymbol(symbol: string): Promise<void> {
+    try {
+      await this.redis.srem(DYNAMIC_SYMBOLS_KEY, symbol);
+    } catch (error) {
+      console.error(`[Redis] Failed to remove ${symbol}:`, error);
+    }
+  }
+
+  // Never throws; returns [] when Redis is unavailable
+  public async loadDynamicSymbols(): Promise<string[]> {
+    try {
+      return await this.redis.smembers(DYNAMIC_SYMBOLS_KEY);
+    } catch (error) {
+      console.error("[Redis] Failed to load dynamic symbols:", error);
+      return [];
     }
   }
 

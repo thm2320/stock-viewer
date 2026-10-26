@@ -1,12 +1,15 @@
 // src/index.ts
 import { StockFeederService } from "./feeder-service.ts";
 import { StreamFeederService } from "./ws-feeder-service.ts";
+import { ControlServer } from "./control-server.ts";
 import { RedisSink } from "./redis-sink.ts";
 
 // Free-tier TwelveData limit: 8 API requests per minute
 const FREE_TIER_REQUESTS_PER_MINUTE = 8;
 // Free-tier TwelveData limit: 8 concurrent WebSocket symbols
-const FREE_TIER_WS_SYMBOLS = 8;
+const DEFAULT_MAX_SYMBOLS = 8;
+const DEFAULT_CONTROL_PORT = 3003;
+const DEFAULT_IDLE_TTL_MS = 600_000;
 const DEFAULT_POLL_INTERVAL_MS = 60_000;
 
 // ws streams ticks into the ticks table; rest polls quotes into the quotes table
@@ -21,6 +24,7 @@ const requiredEnv = [
   feedMode === "ws" ? "TICKS_TABLE_NAME" : "DYNAMODB_TABLE_NAME",
   "AWS_REGION",
   "REDIS_URL",
+  ...(feedMode === "ws" ? ["INGEST_TOKEN"] : []),
 ];
 const missingEnv = requiredEnv.filter((name) => !process.env[name]);
 if (missingEnv.length > 0) {
@@ -46,9 +50,13 @@ const symbols = (process.env.SYMBOLS ?? "AAPL")
 const pollIntervalMs =
   Number(process.env.POLL_INTERVAL_MS) || DEFAULT_POLL_INTERVAL_MS;
 
-if (feedMode === "ws" && symbols.length > FREE_TIER_WS_SYMBOLS) {
+const maxSymbols = Number(process.env.MAX_SYMBOLS) || DEFAULT_MAX_SYMBOLS;
+const controlPort = Number(process.env.CONTROL_PORT) || DEFAULT_CONTROL_PORT;
+const idleTtlMs = Number(process.env.IDLE_TTL_MS) || DEFAULT_IDLE_TTL_MS;
+
+if (feedMode === "ws" && symbols.length > maxSymbols) {
   console.warn(
-    `${symbols.length} symbols exceeds the free-tier limit of ${FREE_TIER_WS_SYMBOLS} WebSocket symbols; some subscriptions may be rejected.`,
+    `${symbols.length} symbols exceeds MAX_SYMBOLS (${maxSymbols}); some subscriptions may be rejected.`,
   );
 } else if (
   feedMode === "rest" &&
@@ -61,10 +69,19 @@ if (feedMode === "ws" && symbols.length > FREE_TIER_WS_SYMBOLS) {
 
 const redisSink = new RedisSink(process.env.REDIS_URL!);
 
-const feeder =
+const streamFeeder =
   feedMode === "ws"
-    ? new StreamFeederService({ symbols, redisSink })
-    : new StockFeederService({ symbols, pollIntervalMs, redisSink });
+    ? new StreamFeederService({ symbols, redisSink, maxSymbols, idleTtlMs })
+    : null;
+const feeder =
+  streamFeeder ?? new StockFeederService({ symbols, pollIntervalMs, redisSink });
+const controlServer = streamFeeder
+  ? new ControlServer({
+      port: controlPort,
+      token: process.env.INGEST_TOKEN!,
+      feeder: streamFeeder,
+    })
+  : null;
 
 console.log(`Starting Stock Market Feeder Ingest Service (${feedMode})...`);
 try {
@@ -74,10 +91,22 @@ try {
   process.exit(1);
 }
 
+if (controlServer) {
+  try {
+    await controlServer.start();
+  } catch (error) {
+    console.error("Failed to start control server:", error);
+    process.exit(1);
+  }
+} else {
+  console.log("Control server disabled in rest mode.");
+}
+
 // Handle graceful shutdown on signals
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, async () => {
     console.log(`\nStopping service due to ${signal}...`);
+    await controlServer?.stop();
     await feeder.stop();
     process.exit(0);
   });

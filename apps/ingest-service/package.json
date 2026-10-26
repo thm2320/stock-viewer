@@ -5,19 +5,21 @@
   "private": true,
   "scripts": {
     "dev": "node --watch --env-file .env src/index.ts ",
-    "check-types": "tsc --noEmit"
+    "check-types": "tsc --noEmit",
+    "test": "vitest run"
   },
   "devDependencies": {
     "@repo/typescript-config": "workspace:*",
     "@types/node": "^26.6.5",
     "eslint": "10.9.1",
     "jest": "^30.5.2",
-    "typescript": "7.0.2"
+    "typescript": "7.0.2",
+    "vitest": "^4.1.11"
   },
   "dependencies": {
-    "@repo/shared": "workspace:*",
     "@aws-sdk/client-dynamodb": "^3.1152.0",
     "@aws-sdk/util-dynamodb": "^3.996.9",
+    "@repo/shared": "workspace:*",
     "@twelvedata/twelvedata-node": "^1.2.7",
     "ioredis": "^6.0.0"
   }
