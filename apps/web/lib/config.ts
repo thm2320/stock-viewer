@@ -1,5 +1,5 @@
 const DEFAULT_API_URL = "http://localhost:3002";
-const DEFAULT_SYMBOLS = "AAPL,EUR/USD";
+const DEFAULT_SYMBOLS = "AAPL";
 
 /** Comma-separated list; trims, drops empties and case-insensitive duplicates. */
 export function parseSymbols(raw: string | undefined): string[] {

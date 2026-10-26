@@ -78,7 +78,7 @@ export class StreamFeederService {
 
     await this.client.connect();
     this.client.subscribe(this.config.symbols);
-    await this.restoreDynamicSymbols();
+    // await this.restoreDynamicSymbols();
 
     this.timer = setInterval(() => {
       this.flush();
