@@ -13,6 +13,8 @@ async function bootstrap() {
   }
   try {
     const app = await NestFactory.create(AppModule);
+    // Same open policy as the gateway; tighten `origin` before deploying.
+    app.enableCors({ origin: '*' });
     // No adapter call needed: Nest uses IoAdapter when platform-socket.io is installed
     app.enableShutdownHooks();
     await app.listen(port);
