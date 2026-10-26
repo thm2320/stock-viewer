@@ -1,7 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
+import { isValidSymbol } from "@repo/shared";
 import { formatDelta, formatPrice, formatTime } from "../../lib/format";
+import { addRecentSymbol, loadRecentSymbols } from "../../lib/recent-symbols";
+import {
+  errorMessage,
+  requestSubscription,
+  type SubscribeFailureCode,
+} from "../../lib/subscriptions";
 import type { Direction } from "../../lib/tick-state";
 import { useLivePrice, type ConnectionStatus } from "./use-live-price";
 import styles from "./live-prices.module.css";
@@ -23,27 +30,95 @@ export function LivePrices({
   symbols: string[];
 }) {
   const [symbol, setSymbol] = useState(symbols[0] ?? "");
-  const { status, live, isStale } = useLivePrice(apiUrl, symbol);
+  const [input, setInput] = useState("");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<SubscribeFailureCode | null>(null);
+  const [recents, setRecents] = useState<string[]>([]);
+  const { status, live, isStale, subscribeError } = useLivePrice(
+    apiUrl,
+    symbol,
+  );
+
+  // localStorage is unavailable during SSR, so load after mount
+  useEffect(() => setRecents(loadRecentSymbols()), []);
+
+  const chips = dedupeSymbols([...symbols, ...recents]);
+  const shownError = error ?? subscribeError;
+
+  async function subscribe(raw: string) {
+    if (pending) return;
+    const next = raw.replace(/\s+/g, "");
+    if (!isValidSymbol(next)) {
+      setError("invalid");
+      return;
+    }
+    setPending(true);
+    setError(null);
+    const result = await requestSubscription(apiUrl, next);
+    setPending(false);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    setSymbol(next);
+    setRecents(addRecentSymbol(next));
+    setInput("");
+  }
+
+  function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    void subscribe(input);
+  }
 
   return (
     <main className={styles.main}>
       <h1>Live prices</h1>
 
       <div className={styles.controls}>
-        <label>
-          Symbol{" "}
-          <select value={symbol} onChange={(e) => setSymbol(e.target.value)}>
-            {symbols.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        </label>
+        <form className={styles.form} onSubmit={onSubmit}>
+          <label>
+            Symbol{" "}
+            <input
+              value={input}
+              onChange={(e) => {
+                setInput(e.target.value);
+                setError(null);
+              }}
+              placeholder="AAPL, EUR/USD"
+              autoComplete="off"
+              spellCheck={false}
+              aria-invalid={error !== null}
+            />
+          </label>
+          <button type="submit" disabled={pending}>
+            {pending ? "Subscribing..." : "Subscribe"}
+          </button>
+        </form>
         <p role="status" className={`${styles.status} ${styles[status]}`}>
           <span className={styles.dot} aria-hidden="true" />
           {STATUS_LABEL[status]}
         </p>
+      </div>
+
+      {shownError && (
+        <p role="alert" className={styles.error}>
+          {errorMessage(shownError)}
+        </p>
+      )}
+
+      <div className={styles.chips}>
+        {chips.map((s) => (
+          <button
+            key={s}
+            type="button"
+            className={styles.chip}
+            aria-pressed={s.toLowerCase() === symbol.toLowerCase()}
+            disabled={pending}
+            onClick={() => void subscribe(s)}
+          >
+            {s}
+          </button>
+        ))}
       </div>
 
       <section className={styles.card} aria-label={`${symbol} price`}>
@@ -79,4 +154,14 @@ export function LivePrices({
       </section>
     </main>
   );
+}
+
+function dedupeSymbols(list: string[]): string[] {
+  const seen = new Set<string>();
+  return list.filter((s) => {
+    const key = s.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }

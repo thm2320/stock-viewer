@@ -16,7 +16,15 @@
   flex-wrap: wrap;
 }
 
-.controls select {
+.form {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.form input {
+  width: 10rem;
   font: inherit;
   padding: 0.25rem 0.5rem;
   color: inherit;
@@ -25,9 +33,49 @@
   border-radius: 6px;
 }
 
-.controls select:focus-visible {
+.form button,
+.chip {
+  font: inherit;
+  padding: 0.25rem 0.75rem;
+  color: inherit;
+  background: var(--background);
+  border: 1px solid var(--muted);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.form button:disabled,
+.chip:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.form input:focus-visible,
+.form button:focus-visible,
+.chip:focus-visible {
   outline: 2px solid currentColor;
   outline-offset: 2px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.chip {
+  border-radius: 999px;
+  font-family: var(--font-geist-mono), monospace;
+}
+
+.chip[aria-pressed="true"] {
+  color: var(--background);
+  background: var(--foreground);
+  border-color: var(--foreground);
+}
+
+.error {
+  color: var(--down);
 }
 
 .status {
