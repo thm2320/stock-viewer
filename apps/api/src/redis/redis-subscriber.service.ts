@@ -23,7 +23,7 @@ export class RedisSubscriberService implements OnModuleInit, OnModuleDestroy {
   private readonly patternHandlers = new Map<string, Set<MessageHandler>>();
 
   constructor(private configService: ConfigService) {
-    const redisUrl = this.configService.get<string>('REDIS_URL')!
+    const redisUrl = this.configService.get<string>('REDIS_URL')!;
     this.redisSubscriber = new Redis(redisUrl, {
       // ioredis re-subscribes to all channels automatically after a reconnect.
       autoResubscribe: true,
@@ -32,14 +32,15 @@ export class RedisSubscriberService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleInit() {
-    this.redisSubscriber.on('connect', () => this.logger.log('Connected to Redis'));
+    this.redisSubscriber.on('connect', () =>
+      this.logger.log('Connected to Redis'),
+    );
     this.redisSubscriber.on('error', (err) =>
       this.logger.error(`Redis error: ${err.message}`),
     );
 
     // Exact channel subscriptions
     this.redisSubscriber.on('message', (channel, raw) => {
-      console.log(raw)
       this.dispatch(this.channelHandlers.get(channel), raw, channel);
     });
 
@@ -47,7 +48,6 @@ export class RedisSubscriberService implements OnModuleInit, OnModuleDestroy {
     this.redisSubscriber.on('pmessage', (pattern, channel, raw) => {
       this.dispatch(this.patternHandlers.get(pattern), raw, channel);
     });
-
   }
 
   /** Subscribe to an exact channel. Returns a function that unsubscribes this handler. */

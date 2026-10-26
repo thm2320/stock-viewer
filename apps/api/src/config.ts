@@ -1,7 +1,8 @@
 export interface AppConfig {
   redisUrl: string;
-  /** Canonical casing as written in SYMBOLS; the gateway allow-list. */
-  symbols: string[];
+  /** Base URL of ingest's control server (POST /subscriptions). */
+  ingestUrl: string;
+  ingestToken: string;
   port: number;
 }
 
@@ -10,14 +11,12 @@ export class ConfigError extends Error {}
 export const APP_CONFIG = Symbol('APP_CONFIG');
 
 const DEFAULT_PORT = 3002;
-const DEFAULT_SYMBOLS = 'AAPL';
-// Allows EUR/USD, RY:TSX, BRK.B; excludes Redis glob characters
-const SYMBOL_PATTERN = /^[A-Za-z0-9._:/-]+$/;
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   return {
     redisUrl: parseRedisUrl(env.REDIS_URL),
-    symbols: parseSymbols(env.SYMBOLS),
+    ingestUrl: parseIngestUrl(env.INGEST_URL),
+    ingestToken: parseIngestToken(env.INGEST_TOKEN),
     port: parsePort(env.PORT),
   };
 }
@@ -40,29 +39,26 @@ function parseRedisUrl(raw: string | undefined): string {
   return raw;
 }
 
-/** Same comma-separated format as ingest's SYMBOLS (default AAPL). */
-function parseSymbols(raw: string | undefined): string[] {
-  const seen = new Set<string>();
-  const symbols: string[] = [];
-  for (const entry of (raw ?? DEFAULT_SYMBOLS).split(',')) {
-    const symbol = entry.trim();
-    if (!symbol) {
-      continue;
-    }
-    if (!SYMBOL_PATTERN.test(symbol)) {
-      throw new ConfigError(`Invalid symbol in SYMBOLS: "${symbol}"`);
-    }
-    const key = symbol.toLowerCase();
-    if (seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    symbols.push(symbol);
+function parseIngestUrl(raw: string | undefined): string {
+  if (!raw) {
+    throw new ConfigError('Missing required env var INGEST_URL');
   }
-  if (symbols.length === 0) {
-    throw new ConfigError('SYMBOLS must contain at least one symbol');
+  try {
+    const { protocol } = new URL(raw);
+    if (protocol !== 'http:' && protocol !== 'https:') {
+      throw new Error();
+    }
+  } catch {
+    throw new ConfigError('Invalid INGEST_URL: expected an http(s):// URL.');
   }
-  return symbols;
+  return raw;
+}
+
+function parseIngestToken(raw: string | undefined): string {
+  if (!raw?.trim()) {
+    throw new ConfigError('Missing required env var INGEST_TOKEN');
+  }
+  return raw;
 }
 
 function parsePort(raw: string | undefined): number {

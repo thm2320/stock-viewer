@@ -25,6 +25,32 @@
 
 [Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
 
+## Symbol subscriptions
+
+Besides the Socket.IO tick gateway, the api exposes `POST /subscriptions` so clients can stream any symbol TwelveData supports, not only a fixed list. The api validates the request and forwards it to the ingest service's control server, which starts the stream.
+
+```bash
+curl -X POST localhost:3002/subscriptions -H 'content-type: application/json' -d '{"symbol":"NVDA"}'
+```
+
+| Status | Body                      | Meaning                                         |
+| ------ | ------------------------- | ----------------------------------------------- |
+| `200`  | `{"symbol":"NVDA"}`       | Ingest is streaming the symbol                  |
+| `400`  | `{"error":"invalid"}`     | Not a valid symbol                              |
+| `422`  | `{"error":"unsupported"}` | TwelveData does not support it                  |
+| `409`  | `{"error":"capacity"}`    | No free symbol slot (free plan: 8 in total)     |
+| `503`  | `{"error":"unavailable"}` | Ingest is down or `INGEST_TOKEN` does not match |
+| `429`  |                           | Throttled: 20 requests per minute               |
+
+After a `200`, the client joins the room with `socket.emit('subscribe', { symbol })`. The ack is `{ subscribed }` or `{ error }` (`invalid`, or `limit` after 20 symbols on one connection), and the latest quote is sent right away as a `tick`. While a symbol has subscribers, the api tells ingest every 3 minutes so it is not unsubscribed as idle.
+
+| Variable       | Description                                         |
+| -------------- | --------------------------------------------------- |
+| `REDIS_URL`    | Redis ingest publishes to                           |
+| `INGEST_URL`   | Ingest control server, e.g. `http://localhost:3003` |
+| `INGEST_TOKEN` | Must equal ingest's `INGEST_TOKEN`                  |
+| `PORT`         | HTTP and Socket.IO port (default `3002`)            |
+
 ## Project setup
 
 ```bash

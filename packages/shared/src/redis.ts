@@ -17,3 +17,6 @@ export function symbolFromChannel(channel: string): string | undefined {
     ? channel.slice(TICK_CHANNEL_PREFIX.length)
     : undefined;
 }
+
+/** Redis set of dynamically subscribed symbols; ingest reloads it on boot. */
+export const DYNAMIC_SYMBOLS_KEY = "dynamic:symbols";
