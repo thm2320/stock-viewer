@@ -17,3 +17,33 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+  # docker compose --profile app up --build
+  ingest:
+    profiles: ["app"]
+    image: stock-viewer/ingest:local
+    build:
+      context: .
+      dockerfile: apps/ingest-service/Dockerfile
+    env_file: apps/ingest-service/.env
+    environment:
+      REDIS_URL: redis://redis:6379
+      AWS_ENDPOINT_URL: http://floci:4566
+    depends_on:
+      redis:
+        condition: service_healthy
+      floci:
+        condition: service_started
+    ports:
+      - "3003:3003"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          fetch('http://127.0.0.1:3003/health').then(r => process.exit(r.ok ? 0 : 1),
+          () => process.exit(1))
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3

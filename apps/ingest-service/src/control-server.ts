@@ -48,6 +48,10 @@ export class ControlServer {
   }
 
   private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    // Liveness probe for Docker; the only route without a token
+    if (req.url === "/health" && req.method === "GET") {
+      return send(res, 200, { status: "ok" });
+    }
     if (!this.isAuthorized(req)) return send(res, 401, {});
     if (req.url !== "/subscriptions") return send(res, 404, {});
 

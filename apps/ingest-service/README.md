@@ -60,3 +60,27 @@ curl localhost:3003/subscriptions -H 'x-ingest-token: <INGEST_TOKEN>'   # {"pinn
 - A dynamic symbol is unsubscribed after `IDLE_TTL_MS` without a request. The API repeats the request every 3 minutes while a client is subscribed to the symbol.
 - Dynamic symbols are mirrored in the Redis set `dynamic:symbols`. They are not re-subscribed on restart.
 - The control server is disabled in `rest` mode.
+
+## Run in Docker
+
+The image is built from the repo root (it needs the workspace lockfile and `@repo/shared`). `.env` is never copied into the image; compose injects it at runtime.
+
+```bash
+cp apps/ingest-service/.env.example apps/ingest-service/.env   # fill in TWELVEDATA_API_KEY
+docker compose up -d floci redis                               # Floci must be up before Terraform
+pnpm infra:init && (cd infra && terraform apply)               # creates the ticks table in Floci
+docker compose --profile app up --build ingest
+```
+
+The `ingest` service sits behind the `app` compose profile, so a plain `docker compose up` still starts only redis and floci. Compose overrides `REDIS_URL` with `redis://redis:6379` and `AWS_ENDPOINT_URL` with `http://floci:4566`, so a `.env` written for `pnpm dev` works unchanged. The `ticks` table comes from Terraform (`infra/`), so run `terraform apply` again if Floci's `./data` was wiped.
+
+To build and run the image on its own:
+
+```bash
+docker build -f apps/ingest-service/Dockerfile -t stock-viewer/ingest:local .
+docker run --rm --env-file apps/ingest-service/.env -e REDIS_URL=... -e AWS_ENDPOINT_URL=... -p 3003:3003 stock-viewer/ingest:local
+```
+
+- The container runs as the non-root `node` user and `node` is PID 1, so `docker stop` delivers `SIGTERM` and shuts down cleanly (exit `0`).
+- `GET /health` returns `200` without a token and is the only unauthenticated route; the container healthcheck uses it.
+- Only one instance may use a TwelveData key, so stop any local `pnpm dev` ingest before starting the container.
