@@ -1,0 +1,12 @@
+node_modules
+.git
+data/
+.turbo
+.next
+dist
+.env*
+!.env.example
+.terraform
+*.tfstate*
+HANDOFF.md
+out
