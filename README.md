@@ -1,159 +1,153 @@
-# Turborepo starter
+# stock-viewer
 
-This Turborepo starter is maintained by the Turborepo core team.
+A personal learning project: a small real-time price viewer built as a Turborepo monorepo. An ingest service reads ticks from a market-data feed, publishes them through Redis and stores them in DynamoDB. A NestJS API fans them out over Socket.IO to a Next.js page. The feed is a configurable data source (currently TwelveData, picked because it has a free tier); the point of the project is the plumbing around it, not the data.
 
-## Using this example
+It is not deployed anywhere. The Terraform in `infra/` has only been applied against Floci, a local AWS emulator, never against real AWS.
 
-Run the following command:
+## Architecture
 
-```sh
-npx create-turbo@latest
+```mermaid
+flowchart LR
+  feed[Market-data feed<br/>TwelveData WebSocket] --> ingest[ingest-service]
+  ingest -- "SET quote:SYMBOL<br/>PUBLISH ticks:SYMBOL" --> redis[(Redis)]
+  ingest -- "ticks table" --> ddb[(DynamoDB<br/>Floci locally)]
+  redis -- "PSUBSCRIBE ticks:*" --> api[api<br/>NestJS + Socket.IO]
+  api -- "tick events<br/>one room per symbol" --> web[web<br/>Next.js]
+  web -- "POST /subscriptions" --> api
+  api -- "POST /subscriptions<br/>x-ingest-token" --> ingest
 ```
 
-## What's inside?
+- **ingest-service** streams ticks from the feed. For each tick it writes the latest value to the Redis key `quote:{symbol}`, publishes it on the channel `ticks:{symbol}`, and writes it to the DynamoDB ticks table (items expire through a TTL attribute).
+- **api** holds a single Redis pattern subscription on `ticks:*` and emits each tick to the Socket.IO room for that symbol. When a client joins a room it first gets the latest value from `quote:{symbol}`, so it does not wait for the next tick.
+- **web** connects to the API, lets you type any symbol and shows its live price.
 
-This Turborepo includes the following packages/apps:
+Shared types, Redis key/channel helpers and symbol validation live in `packages/shared`.
 
-### Apps and Packages
+## Tech stack
 
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `@next/eslint-plugin-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
+- Monorepo: Turborepo, pnpm workspaces
+- web: Next.js 16, React 19, socket.io-client
+- api: NestJS 12, Socket.IO, ioredis, Vitest, oxlint
+- ingest-service: Node (runs TypeScript directly, no build step), ioredis, AWS SDK for DynamoDB, Vitest
+- Data: Redis 7 (latest value and pub/sub), DynamoDB (tick history)
+- Infra: Terraform (AWS provider `~> 5.0`), Floci, Docker Compose
 
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
+## Repo layout
 
-### Utilities
-
-This Turborepo has some additional tools already setup for you:
-
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
-
-### Build
-
-To build all apps and packages, run the following command:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo build
+```
+apps/
+  web/              Next.js live prices page
+  api/              NestJS API: Socket.IO gateway and POST /subscriptions
+  ingest-service/   Feed -> Redis + DynamoDB, plus a small control server
+  docs/             Leftover Turborepo starter app, not used by the project
+packages/
+  shared/           Types and helpers used by web, api and ingest
+  ui/, math/        Small packages used by web (ui and math are mostly starter code)
+  eslint-config/, typescript-config/
+infra/              Terraform for the DynamoDB tables (Floci)
+docker-compose.yaml Floci, Redis, and the ingest service (profile "app")
 ```
 
-Without global `turbo`, use your package manager:
+## Running locally
 
-```sh
-cd my-turborepo
-npx turbo build
-pnpm exec turbo build
-pnpm exec turbo build
+### Prerequisites
+
+- Node >= 24
+- pnpm (the repo pins the version in `packageManager` in `package.json`)
+- Docker
+- Terraform >= 1.7
+- An API key for the market-data feed (TwelveData) for the ingest service
+
+### 1. Install and build the shared package
+
+```bash
+pnpm install
+pnpm --filter @repo/shared build   # api and ingest import it from dist/
 ```
 
-You can build a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+### 2. Env files
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo build --filter=docs
+```bash
+cp apps/ingest-service/.env.example apps/ingest-service/.env   # set TWELVEDATA_API_KEY and INGEST_TOKEN
+cp apps/api/.env.example apps/api/.env                         # INGEST_TOKEN must match ingest's
+cp apps/web/.env.example apps/web/.env.local                   # optional, defaults match
 ```
 
-Without global `turbo`:
+The `.env` files are git-ignored. Variables are documented in each `.env.example` and in [`apps/ingest-service/README.md`](apps/ingest-service/README.md) and [`apps/web/README.md`](apps/web/README.md).
 
-```sh
-npx turbo build --filter=docs
-pnpm exec turbo build --filter=docs
-pnpm exec turbo build --filter=docs
+### 3. Redis and Floci
+
+```bash
+docker compose up -d floci redis
 ```
 
-### Develop
+| Service | Port |
+| ------- | ---- |
+| Floci   | 4566 |
+| Redis   | 6379 |
 
-To develop all apps and packages, run the following command:
+Floci keeps its state in `./data`.
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
+### 4. Create the DynamoDB tables
 
-```sh
-cd my-turborepo
-turbo dev
+Floci must be running first.
+
+```bash
+pnpm infra:init                 # terraform init, state kept in ~/.terraform-state/stock-viewer
+(cd infra && terraform apply)
 ```
 
-Without global `turbo`, use your package manager:
+### 5. Start the services
 
-```sh
-cd my-turborepo
-npx turbo dev
-pnpm exec turbo dev
-pnpm exec turbo dev
+Run each in its own terminal:
+
+```bash
+pnpm --filter ingest-service dev   # control server on :3003
+pnpm --filter api dev              # :3002
+pnpm --filter web dev              # http://localhost:3000, redirects to /live
 ```
 
-You can develop a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+Alternatively run ingest in Docker through the `app` compose profile (stop any local ingest first, since only one instance should use a feed key):
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo dev --filter=web
+```bash
+docker compose --profile app up --build ingest
 ```
 
-Without global `turbo`:
+Compose overrides `REDIS_URL` and `AWS_ENDPOINT_URL` for the container, so the same `.env` works for both. See [`apps/ingest-service/README.md`](apps/ingest-service/README.md) for Docker details and the `/health` endpoint.
 
-```sh
-npx turbo dev --filter=web
-pnpm exec turbo dev --filter=web
-pnpm exec turbo dev --filter=web
+## Subscribing to any symbol
+
+The API is not limited to a fixed symbol list. When you pick a symbol in the web page:
+
+1. `web` calls `POST /subscriptions` on the API with `{"symbol": "NVDA"}`.
+2. The API validates the symbol and forwards the request to the ingest control server (`POST /subscriptions` on port 3003) with the `x-ingest-token` header.
+3. Ingest subscribes to the symbol on the feed and starts publishing `ticks:NVDA`.
+4. `web` joins the symbol's Socket.IO room and receives `tick` events.
+
+While a client is subscribed, the API repeats step 2 every 3 minutes. Ingest drops a dynamic symbol after `IDLE_TTL_MS` (default 10 minutes) without a request. The total number of symbols is capped by `MAX_SYMBOLS` (default 8, the free-tier limit). Failures come back as `invalid`, `unsupported`, `capacity` or `unavailable`. Status codes and details are in [`apps/ingest-service/README.md`](apps/ingest-service/README.md). The ingest control port is meant to be reached only by the API.
+
+## Testing, lint and type-check
+
+```bash
+pnpm lint
+pnpm check-types
+pnpm --filter api test
+pnpm --filter ingest-service test
+pnpm format              # prettier --write on all .ts, .tsx and .md files
 ```
 
-### Remote Caching
+Build `@repo/shared` first (step 1), otherwise the api and ingest tests cannot resolve it.
 
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
+Current state: `pnpm check-types` and the api unit tests pass. `pnpm lint` currently fails in `api` (two `curly` errors in `src/redis/redis-subscriber.service.ts`), and one ingest test (`restores persisted dynamic symbols on start`) fails because dynamic symbols are no longer restored on boot. The `web` app has no tests.
 
-Turborepo can use a technique known as [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
+## Infrastructure
 
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
+`infra/` defines two DynamoDB tables (`stock-viewer-local-ticks` and `-quotes`) and points the AWS provider at Floci with dummy credentials. S3 and Secrets Manager resources are present but commented out. Setting `floci_endpoint` to an empty string would target real AWS, but that has not been tried.
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
+## What I am practising
 
-```sh
-cd my-turborepo
-turbo login
-```
-
-Without global `turbo`, use your package manager:
-
-```sh
-cd my-turborepo
-npx turbo login
-pnpm exec turbo login
-pnpm exec turbo login
-```
-
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
-
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo link
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo link
-pnpm exec turbo link
-pnpm exec turbo link
-```
-
-## Useful Links
-
-Learn more about the power of Turborepo:
-
-- [Tasks](https://turborepo.dev/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.dev/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.dev/docs/reference/configuration)
-- [CLI Usage](https://turborepo.dev/docs/reference/command-line-reference)
+- Agentic coding with Orca: parallel Claude agents on scoped tasks, plan-first review, and PRs
+- Terraform as infrastructure as code, tested locally against Floci
+- Redis, both as a cache for the latest value and for pub/sub
+- WebSockets with Socket.IO: rooms, acks, reconnects
+- Building an ingest service and an API backend
